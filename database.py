@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-DB_HOST = os.getenv("DB_HOST")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME")
+DB_HOST = os.getenv("Ksahil2828.mysql.pythonanywhere-services.com")
+DB_USER = os.getenv("Ksahil2828")
+DB_PASSWORD = os.getenv("S@@ilk98")
+DB_NAME = os.getenv("Ksahil2828$Moviekotha")
 
 def get_db_connection():
     """Establishes a connection to the MySQL database."""
