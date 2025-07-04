@@ -1,8 +1,10 @@
 import logging
 import os
+import asyncio
 from dotenv import load_dotenv
-import threading
-from flask import Flask
+
+# Import Flask and the request object
+from flask import Flask, request
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -15,17 +17,22 @@ import gplink
 # Load environment variables
 load_dotenv()
 
+# --- Your Environment Variables (Make sure these are set in Render) ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") # This is your Render app URL
 
 # Set up logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logging.getLogger("httpx").setLevel(logging.WARNING) # Quieter logs
 logger = logging.getLogger(__name__)
 
-# --- Command Handlers (These are all the same as before) ---
 
+# --- ALL YOUR COMMAND AND MESSAGE HANDLERS ARE PERFECT. NO CHANGES NEEDED HERE. ---
+# start_command, help_command, add_movie_command, handle_movie_search
+# are all left exactly as they were.
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     welcome_message = (
@@ -86,20 +93,19 @@ async def add_movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in /addmovie command: {e}")
         await update.message.reply_text(f"An unexpected error occurred: {e}")
 
-# --- Message Handler (Same as before) ---
 async def handle_movie_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
     if len(query) < 3:
         await update.message.reply_text("⚠️ Please enter at least 3 characters to search.")
         return
-    
+
     await update.message.reply_text(f"Searching for movies matching '{query}'...")
     movies = database.search_movies(query)
 
     if not movies:
         await update.message.reply_text(f"😞 Sorry, no movies found for '{query}'. Please try another name.")
         return
-    
+
     await update.message.reply_text(f"Found {len(movies)} result(s)! Sending them now...")
 
     for movie_data in movies:
@@ -118,10 +124,10 @@ async def handle_movie_search(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if short_url:
                     caption_lines.append(f"🔗 **{quality.upper()}:** [Download]({short_url})")
                     has_links = True
-        
+
         if not has_links:
             caption_lines.append("No download links available for this movie yet.")
-        
+
         final_caption = "\n".join(caption_lines)
         try:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=details['poster_url'], caption=final_caption, parse_mode=ParseMode.MARKDOWN)
@@ -129,34 +135,54 @@ async def handle_movie_search(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"Failed to send photo for movie {details['title']}: {e}")
             await update.message.reply_text(f"Could not send poster for {details['title']}, but here are the details:\n\n{final_caption}", parse_mode=ParseMode.MARKDOWN)
 
-# --- NEW PART: WEB SERVER & BOT STARTUP for RENDER ---
+
+# --- THIS IS THE NEW CORE LOGIC FOR DEPLOYMENT ---
+
+# 1. Build the application object and add your handlers
+application = (
+    Application.builder()
+    .token(BOT_TOKEN)
+    .build()
+)
+
+application.add_handler(CommandHandler("start", start_command))
+application.add_handler(CommandHandler("help", help_command))
+application.add_handler(CommandHandler("addmovie", add_movie_command))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_movie_search))
+
+# 2. This async function sets the webhook
+async def setup_webhook():
+    # The URL that Telegram will send updates to.
+    # The `/webhook` part is a secret path that only you and Telegram know.
+    webhook_path = "/webhook"
+    full_webhook_url = f"{WEBHOOK_URL}{webhook_path}"
+    
+    logger.info(f"Setting webhook to: {full_webhook_url}")
+    await application.bot.set_webhook(url=full_webhook_url)
+
+# 3. This initializes the webhook when the server starts
+# We use asyncio.run() to execute the async function
+asyncio.run(setup_webhook())
+
+# 4. Create the Flask app
 app = Flask(__name__)
 
-@app.route('/')
+# This route is for your uptime monitor to ping
+@app.route("/")
 def index():
     return "Bot is running!"
 
-def run_bot():
-    """This function runs the bot"""
-    application = Application.builder().token(BOT_TOKEN).build()
+# This is the route that Telegram will send POST requests to
+@app.route("/webhook", methods=["POST"])
+async def webhook():
+    # Convert the JSON from Telegram into an Update object
+    update = Update.de_json(await request.get_json(), application.bot)
     
-    # Add all your command handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("addmovie", add_movie_command))
+    # Process the update using your handlers
+    await application.process_update(update)
     
-    # Add the message handler
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_movie_search))
-    
-    # Start the bot
-    logger.info("Starting bot polling...")
-    application.run_polling()
+    # Respond to Telegram to let them know you received the update
+    return "OK", 200
 
-if __name__ == "__main__":
-    # Run the bot in a separate thread
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.start()
-    
-    # Run the Flask web server to keep the Render instance alive
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+# NOTE: The `if __name__ == "__main__":` block is not needed for gunicorn deployment.
+# gunicorn will find the `app` object and run it.
