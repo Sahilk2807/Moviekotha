@@ -1,0 +1,12 @@
+# koyeb.yaml
+services:
+  - name: moviekotha-bot
+    instance_class: free
+    git:
+      branch: main # Or master, whichever your main branch is
+      repository: <your-github-username>/<your-repo-name>
+    run_command: python bot.py
+    health_checks:
+      - type: tcp
+        port: 8080 # This is a trick to pass the health check
+        path: /
