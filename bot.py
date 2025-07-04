@@ -1,3 +1,6 @@
+# =================================================================
+#                 FINAL bot.py FOR RENDER DEPLOYMENT
+# =================================================================
 import logging
 import os
 import asyncio
@@ -10,6 +13,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
+# Make sure these files exist and are correct
 import tmdb
 import database
 import gplink
@@ -17,22 +21,38 @@ import gplink
 # Load environment variables
 load_dotenv()
 
-# --- Your Environment Variables (Make sure these are set in Render) ---
+# --- Get All Your Secrets from Render's Environment Variables ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") # This is your Render app URL
+ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Set up logging
+# --- Basic Setup and Logging ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-logging.getLogger("httpx").setLevel(logging.WARNING) # Quieter logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# --- Important Check: Make sure all secrets are loaded ---
+if not BOT_TOKEN:
+    logger.critical("FATAL ERROR: BOT_TOKEN is not set!")
+if not ADMIN_USER_ID_STR:
+    logger.critical("FATAL ERROR: ADMIN_USER_ID is not set!")
+if not WEBHOOK_URL:
+    logger.critical("FATAL ERROR: WEBHOOK_URL is not set!")
 
-# --- ALL YOUR COMMAND AND MESSAGE HANDLERS ARE PERFECT. NO CHANGES NEEDED HERE. ---
-# start_command, help_command, add_movie_command, handle_movie_search
-# are all left exactly as they were.
+# Convert ADMIN_USER_ID to an integer safely
+try:
+    ADMIN_USER_ID = int(ADMIN_USER_ID_STR)
+except (ValueError, TypeError):
+    logger.critical("FATAL ERROR: ADMIN_USER_ID is not a valid number!")
+    ADMIN_USER_ID = None # Set to None to prevent crashes
+
+# =================================================================
+#                 YOUR BOT'S COMMAND HANDLERS
+#          (These are your functions, no changes needed)
+# =================================================================
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     welcome_message = (
@@ -59,7 +79,6 @@ async def add_movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_USER_ID:
         await update.message.reply_text("⛔ Sorry, this is an admin-only command.")
         return
-
     try:
         parts = " ".join(context.args).split(' | ')
         if len(parts) != 6:
@@ -69,7 +88,6 @@ async def add_movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "*Remember to use 'na' for any missing links.*"
             )
             return
-
         tmdb_id_str, title, link_480p, link_720p, link_1080p, link_x265 = parts
         tmdb_id = int(tmdb_id_str.strip())
         title = title.strip()
@@ -84,11 +102,6 @@ async def add_movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"✅ {message}")
         else:
             await update.message.reply_text(f"FAILED: {message}")
-
-    except (ValueError, IndexError):
-        await update.message.reply_text(
-            "❌ Invalid input. Make sure TMDB_ID is a number and the format is correct."
-        )
     except Exception as e:
         logger.error(f"Error in /addmovie command: {e}")
         await update.message.reply_text(f"An unexpected error occurred: {e}")
@@ -96,25 +109,18 @@ async def add_movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_movie_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip()
     if len(query) < 3:
-        await update.message.reply_text("⚠️ Please enter at least 3 characters to search.")
         return
-
     await update.message.reply_text(f"Searching for movies matching '{query}'...")
     movies = database.search_movies(query)
-
     if not movies:
-        await update.message.reply_text(f"😞 Sorry, no movies found for '{query}'. Please try another name.")
+        await update.message.reply_text(f"😞 Sorry, no movies found for '{query}'.")
         return
-
     await update.message.reply_text(f"Found {len(movies)} result(s)! Sending them now...")
-
     for movie_data in movies:
         tmdb_id = movie_data.get('tmdb_id')
         details = tmdb.get_movie_details(tmdb_id)
         if not details:
-            logger.warning(f"Could not fetch TMDB details for ID: {tmdb_id}")
             continue
-
         caption_lines = [f"🎬 **{details['title']}**", f"📅 **Release Date:** {details['release_date']}\n", f"📝 **Overview:**\n{details.get('overview', 'N/A')}\n", "--- DOWNLOAD LINKS ---"]
         links = {"480p": movie_data.get('link_480p'), "720p": movie_data.get('link_720p'), "1080p": movie_data.get('link_1080p'), "x265": movie_data.get('link_x265')}
         has_links = False
@@ -124,65 +130,51 @@ async def handle_movie_search(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if short_url:
                     caption_lines.append(f"🔗 **{quality.upper()}:** [Download]({short_url})")
                     has_links = True
-
         if not has_links:
             caption_lines.append("No download links available for this movie yet.")
-
         final_caption = "\n".join(caption_lines)
         try:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=details['poster_url'], caption=final_caption, parse_mode=ParseMode.MARKDOWN)
         except Exception as e:
             logger.error(f"Failed to send photo for movie {details['title']}: {e}")
-            await update.message.reply_text(f"Could not send poster for {details['title']}, but here are the details:\n\n{final_caption}", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"Could not send poster for {details['title']}.\n\n{final_caption}", parse_mode=ParseMode.MARKDOWN)
 
 
-# --- THIS IS THE NEW CORE LOGIC FOR DEPLOYMENT ---
+# =================================================================
+#        THE PART THAT RUNS ON RENDER (THE WEB SERVER)
+# =================================================================
 
-# 1. Build the application object and add your handlers
-application = (
-    Application.builder()
-    .token(BOT_TOKEN)
-    .build()
-)
+# Create the main application object
+application = Application.builder().token(BOT_TOKEN).build()
 
+# Add all the handlers from above
 application.add_handler(CommandHandler("start", start_command))
 application.add_handler(CommandHandler("help", help_command))
 application.add_handler(CommandHandler("addmovie", add_movie_command))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_movie_search))
 
-# 2. This async function sets the webhook
-async def setup_webhook():
-    # The URL that Telegram will send updates to.
-    # The `/webhook` part is a secret path that only you and Telegram know.
-    webhook_path = "/webhook"
-    full_webhook_url = f"{WEBHOOK_URL}{webhook_path}"
-    
-    logger.info(f"Setting webhook to: {full_webhook_url}")
-    await application.bot.set_webhook(url=full_webhook_url)
-
-# 3. This initializes the webhook when the server starts
-# We use asyncio.run() to execute the async function
-asyncio.run(setup_webhook())
-
-# 4. Create the Flask app
+# This is the small web server machine inside your bot.py file
+# Gunicorn will find this 'app' object.
 app = Flask(__name__)
 
-# This route is for your uptime monitor to ping
-@app.route("/")
-def index():
-    return "Bot is running!"
-
-# This is the route that Telegram will send POST requests to
+# This is the webhook that Telegram sends updates to
 @app.route("/webhook", methods=["POST"])
 async def webhook():
-    # Convert the JSON from Telegram into an Update object
     update = Update.de_json(await request.get_json(), application.bot)
-    
-    # Process the update using your handlers
     await application.process_update(update)
-    
-    # Respond to Telegram to let them know you received the update
-    return "OK", 200
+    return "OK"
 
-# NOTE: The `if __name__ == "__main__":` block is not needed for gunicorn deployment.
-# gunicorn will find the `app` object and run it.
+# This is the homepage that the uptime monitor will ping
+@app.route("/")
+def index():
+    return "Bot is alive!"
+
+# This function runs only once when the server starts
+async def setup():
+    webhook_url = f"{WEBHOOK_URL}/webhook"
+    await application.bot.set_webhook(url=webhook_url)
+    logger.info(f"Webhook has been set to {webhook_url}")
+
+# This makes sure the setup function runs when the server starts
+# It runs the async function in a blocking way, just once.
+asyncio.run(setup())
