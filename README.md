@@ -1,21 +1,25 @@
-# 🎬 MOVIEKOTHA - Telegram Movie Download Bot
+# 🎬 MOVIEKOTHA - Telegram Movie Download Bot (MySQL Edition)
 
-MOVIEKOTHA is a full-featured Telegram bot that allows users to search for movies and get direct download links for various qualities. It integrates with TMDB for rich movie data, Google Sheets for a real-time link database, and GPLinks to shorten URLs.
+MOVIEKOTHA is a Telegram bot for searching movies and getting download links. This version uses a robust MySQL backend for storing movie data.
 
 ## ✨ Features
 
-- **Intuitive Search**: Users can search for movies by sending a name (case-insensitive, partial matches).
-- **Rich Movie Info**: Displays movie posters, titles, overviews, and release dates fetched from TMDB.
-- **Real-time Link Database**: Fetches download links directly from a Google Sheet, ensuring data is always up-to-date.
-- **Auto URL Shortening**: All download links are automatically converted to short links using GPLinks.
-- **Formatted Output**: Presents information cleanly with Markdown styling and emojis.
-- **Standard Commands**: Includes `/start`, `/help`, and a `/ping` command to check bot status.
-- **Deployment Ready**: Configured for easy deployment on platforms like Render using a `Procfile`.
+- **Intuitive Search**: Search for movies by name.
+- **Rich Movie Info**: Fetches posters, overviews, and details from TMDB.
+- **Robust Database**: Uses MySQL for a stable and scalable movie link database.
+- **In-Bot Admin Panel**: Admins can add new movies using a simple `/addmovie` command.
+- **Auto URL Shortening**: All links are shortened via GPLinks.
 
 ## 🛠️ Setup & Installation
 
-### Step 1: Clone the Repository
+### Step 1: Set up MySQL Database
+- Create a MySQL database from a cloud provider like [PlanetScale](https://planetscale.com/), Aiven, AWS, etc.
+- Note down your `host`, `database name`, `user`, and `password`.
 
+### Step 2: Clone & Install Dependencies
 ```bash
 git clone <your-repo-url>
 cd MOVIEKOTHA
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
