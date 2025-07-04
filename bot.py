@@ -5,7 +5,7 @@ import json
 import asyncio
 from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
@@ -25,15 +25,30 @@ GP_API_KEY = os.getenv("GP_API_KEY")
 SHEET_ID = os.getenv("SHEET_ID")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", 0))
 
+
+# <<< THIS BLOCK IS THE FIX >>>
+# It correctly parses the multi-line private key from the single-line .env variable.
+# ----------------------------------------------------------------------------------
 # Securely load Google Credentials from .env
 try:
-    GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    if not GOOGLE_CREDENTIALS_JSON:
+    GOOGLE_CREDENTIALS_JSON_STR = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if not GOOGLE_CREDENTIALS_JSON_STR:
         raise ValueError("GOOGLE_CREDENTIALS_JSON environment variable not set.")
-    GOOGLE_CREDENTIALS = json.loads(GOOGLE_CREDENTIALS_JSON)
-except (json.JSONDecodeError, ValueError) as e:
-    logging.critical(f"FATAL: Could not load or parse Google credentials. Error: {e}")
+    
+    # First, load the JSON string into a Python dictionary
+    creds_dict = json.loads(GOOGLE_CREDENTIALS_JSON_STR)
+    
+    # Then, fix the private_key by replacing the escaped newlines with actual newlines
+    creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
+    
+    # This is the final, corrected dictionary to be used by gspread
+    GOOGLE_CREDENTIALS = creds_dict
+
+except (json.JSONDecodeError, ValueError, KeyError) as e:
+    logging.critical(f"FATAL: Could not load or parse Google credentials. Check .env. Error: {e}")
     exit()
+# ----------------------------------------------------------------------------------
+
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -179,6 +194,7 @@ def main():
 
     # Initialize and store the Google Sheet client in bot_data
     try:
+        # This now uses the corrected GOOGLE_CREDENTIALS dictionary
         sheet_client = GoogleSheet(credentials=GOOGLE_CREDENTIALS, sheet_id=SHEET_ID)
         application.bot_data["sheet_client"] = sheet_client
     except Exception as e:
