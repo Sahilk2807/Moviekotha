@@ -1,0 +1,9 @@
+# requirements.txt
+python-telegram-bot==21.0.1
+python-dotenv
+gspread
+requests
+httpx
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
