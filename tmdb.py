@@ -1,35 +1,48 @@
 # /moviekotha/tmdb.py
 
-import requests
-import logging
-from urllib.parse import quote
-from config import TMDB_API_KEY, TMDB_ACCESS_TOKEN
+import httpx
+from config import TMDB_API_KEY, LOGGER
 
-LOGGER = logging.getLogger(__name__)
+SEARCH_API_URL = "https://api.themoviedb.org/3/search/movie"
+DETAILS_API_URL = "https://api.themoviedb.org/3/movie/{}"
 
-def search_movie_tmdb(movie_name: str):
-    """Searches TMDb and returns metadata for the first result."""
-    encoded_movie_name = quote(movie_name)
-    url = f"https://api.themoviedb.org/3/search/movie?query={encoded_movie_name}&include_adult=false&language=en-US&page=1"
-    headers = {"accept": "application/json", "Authorization": f"Bearer {TMDB_ACCESS_TOKEN}"}
-
+async def search_movie_by_name(query: str) -> dict | None:
+    """Searches for a movie by name and returns a structured dict of the best match."""
+    params = {"api_key": TMDB_API_KEY, "query": query}
+    
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(SEARCH_API_URL, params=params)
+            if response.status_code != 200:
+                LOGGER.error(f"TMDb search failed with status {response.status_code}")
+                return None
+            
+            results = response.json().get("results")
+            if not results:
+                return None
 
-        if data.get("results"):
-            movie = data["results"][0]
-            poster_path = movie.get("poster_path")
-            poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+            # Get the first and most relevant result
+            best_match = results[0]
+            movie_id = best_match.get("id")
 
+            # Now fetch full details to get genres, etc.
+            details_response = await client.get(DETAILS_API_URL.format(movie_id), params={"api_key": TMDB_API_KEY})
+            if details_response.status_code != 200:
+                return None # Failed to get details, so we can't proceed
+            
+            details = details_response.json()
+            
+            # Create a clean, structured document
             return {
-                "tmdb_id": movie.get("id"),
-                "title": movie.get("title"),
-                "description": movie.get("overview", "No description available."),
-                "release_date": movie.get("release_date"),
-                "poster_url": poster_url
+                "_id": details.get("id"),
+                "title": details.get("title"),
+                "original_title": details.get("original_title"),
+                "year": details.get("release_date", "----").split("-")[0],
+                "overview": details.get("overview"),
+                "poster_path": details.get("poster_path"),
+                "genres": [genre["name"] for genre in details.get("genres", [])],
+                "rating": details.get("vote_average")
             }
-    except requests.exceptions.RequestException as e:
-        LOGGER.error(f"Error fetching data from TMDb: {e}")
-    return None
+    except httpx.RequestError as e:
+        LOGGER.error(f"An error occurred while requesting TMDb: {e}")
+        return None
