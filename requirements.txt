@@ -1,0 +1,11 @@
+# Telegram Bot Framework
+python-telegram-bot[ext]~=20.8
+
+# MongoDB Driver
+pymongo~=4.6.2
+
+# For making HTTP requests to APIs
+requests~=2.31.0
+
+# For loading environment variables in local development
+python-dotenv~=1.0.1
