@@ -1,16 +1,11 @@
-# /moviekotha/requirements.txt
+# requirements.txt
 
-# Telegram Bot Framework
-python-telegram-bot[ext]~=20.8
+# For the Telegram Bot (use a recent, stable version)
+python-telegram-bot~=21.0
 
-# MongoDB Driver
-pymongo~=4.6.2
+# For loading environment variables from a .env file (good practice)
+python-dotenv
 
-# For making HTTP requests to APIs
-requests~=2.31.0
-
-# For loading environment variables in local development
-python-dotenv~=1.0.1
-
-# Web server to keep Render's Web Service alive
-Flask~=3.0.2
+# For connecting to your MongoDB database
+# dnspython is required for mongodb+srv:// URLs
+pymongo[srv]
