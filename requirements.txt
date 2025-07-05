@@ -1,3 +1,5 @@
+# /moviekotha/requirements.txt
+
 # Telegram Bot Framework
 python-telegram-bot[ext]~=20.8
 
@@ -8,4 +10,7 @@ pymongo~=4.6.2
 requests~=2.31.0
 
 # For loading environment variables in local development
-python-dotenv~=1.0.1 
+python-dotenv~=1.0.1
+
+# Web server to keep Render's Web Service alive
+Flask~=3.0.2
