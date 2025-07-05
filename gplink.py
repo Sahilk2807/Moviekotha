@@ -1,27 +1,33 @@
 # /moviekotha/gplink.py
 
-import requests
-import logging
-from config import GPLINKS_API
+import httpx
+from config import GPLINKS_API, LOGGER
 
-LOGGER = logging.getLogger(__name__)
+API_URL = "https://gplinks.in/api"
 
-def shorten_url(long_url: str):
-    """Shortens a URL using GPLinks API, falling back to the original on failure."""
-    api_url = "https://gplinks.in/api"
-    params = {'api': GPLINKS_API, 'url': long_url}
-    
-    try:
-        response = requests.get(api_url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
+async def shorten_url(original_link: str) -> str | None:
+    """Shortens a URL using GPLinks API."""
+    if not GPLINKS_API:
+        LOGGER.warning("GPLINKS_API key not set. Returning original link.")
+        return original_link
         
-        if data.get("status") == "success":
-            LOGGER.info(f"Successfully shortened URL: {long_url}")
-            return data.get("shortenedUrl")
-        else:
-            LOGGER.error(f"GPLinks API Error: {data.get('message', 'Unknown error')}")
-            return long_url
-    except requests.exceptions.RequestException as e:
-        LOGGER.error(f"Error calling GPLinks API: {e}")
-        return long_url
+    params = {"api": GPLINKS_API, "url": original_link}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(API_URL, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    LOGGER.info(f"Successfully shortened link: {data['shortenedUrl']}")
+                    return data["shortenedUrl"]
+                else:
+                    LOGGER.error(f"GPLinks API error: {data.get('message')}")
+                    return None
+            else:
+                LOGGER.error(f"Failed to connect to GPLinks API. Status: {response.status_code}")
+                return None
+    except httpx.RequestError as e:
+        LOGGER.error(f"An error occurred while requesting GPLinks API: {e}")
+        return None
