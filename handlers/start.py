@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a friendly welcome message when the /start command is issued."""
+    """Sends a friendly welcome message."""
     user = update.effective_user
     welcome_message = (
         f"👋 **Welcome to MovieKotha, {user.first_name}!**\n\n"
