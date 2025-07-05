@@ -8,15 +8,10 @@ from config import TMDB_API_KEY, TMDB_ACCESS_TOKEN
 LOGGER = logging.getLogger(__name__)
 
 def search_movie_tmdb(movie_name: str):
-    """
-    Searches for a movie on TMDb and returns its metadata from the first result.
-    """
+    """Searches TMDb and returns metadata for the first result."""
     encoded_movie_name = quote(movie_name)
     url = f"https://api.themoviedb.org/3/search/movie?query={encoded_movie_name}&include_adult=false&language=en-US&page=1"
-    headers = {
-        "accept": "application/json",
-        "Authorization": f"Bearer {TMDB_ACCESS_TOKEN}"
-    }
+    headers = {"accept": "application/json", "Authorization": f"Bearer {TMDB_ACCESS_TOKEN}"}
 
     try:
         response = requests.get(url, headers=headers)
@@ -37,6 +32,4 @@ def search_movie_tmdb(movie_name: str):
             }
     except requests.exceptions.RequestException as e:
         LOGGER.error(f"Error fetching data from TMDb: {e}")
-        return None
-    
     return None
