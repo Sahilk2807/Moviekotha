@@ -1,8 +1,5 @@
 # /moviekotha/main.py
 
-import os
-import threading
-from flask import Flask
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -15,46 +12,48 @@ from handlers.start import start
 from handlers.admin import add_movie_handler, delete_movie_handler, list_movies_handler
 from handlers.search import search_handler
 
-# --- Flask Web Server Setup (to keep Render's Web Service alive) ---
-app = Flask(__name__)
-
-@app.route('/')
-def index():
-    return "MovieKotha Bot is alive!"
-
-def run_flask():
-    # Render provides the PORT environment variable.
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-
-# --- Telegram Bot Setup ---
-def run_telegram_bot():
-    """Start the bot."""
+def main():
+    """Sets up and runs the Telegram bot."""
     LOGGER.info("🚀 Starting MovieKotha Bot...")
 
-    # Set up the database (e.g., create indexes)
-    setup_database()
+    # --- Step 1: Set up the database ---
+    # This is a critical step. If the MONGO_DB_URL is wrong, it will fail here.
+    try:
+        setup_database()
+        LOGGER.info("✅ Database setup successful.")
+    except Exception as e:
+        # If the database connection fails, log the error and stop the bot.
+        LOGGER.error(f"❌ CRITICAL: Failed to setup database. The bot will not start. Error: {e}")
+        return  # Exit the function
 
-    # Create the Application and pass it your bot's token.
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    # Register Handlers
+    # --- Step 2: Create the Telegram Bot Application ---
+    try:
+        application = ApplicationBuilder().token(BOT_TOKEN).build()
+        LOGGER.info("✅ Telegram Application built successfully.")
+    except Exception as e:
+        LOGGER.error(f"❌ CRITICAL: Failed to build Telegram application. Is the BOT_TOKEN valid? Error: {e}")
+        return # Exit the function
+
+    # --- Step 3: Register all command and message handlers ---
+    # Command handlers react to commands like /start, /add
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
-    
     application.add_handler(CommandHandler("add", add_movie_handler))
     application.add_handler(CommandHandler("delete", delete_movie_handler))
     application.add_handler(CommandHandler("list", list_movies_handler))
+    
+    # Message handler for regular text messages (for searching movies)
+    # This should generally be added last as it acts as a "catch-all" for non-command text.
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search_handler))
+    
+    LOGGER.info("✅ All handlers have been registered.")
 
-    # Start the Bot
-    LOGGER.info("✅ Bot has started and is now polling for updates.")
+    # --- Step 4: Start the bot ---
+    # run_polling() starts fetching updates from Telegram. This is a blocking call.
+    LOGGER.info("⏳ Bot is now polling for updates...")
     application.run_polling()
+    
+    # This line will only be reached if the bot is stopped (e.g., with Ctrl+C)
     LOGGER.info("👋 Bot has been stopped.")
 
 if __name__ == "__main__":
-    # Run Flask app in a separate thread
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    
-    # Run the Telegram bot in the main thread
-    run_telegram_bot()
+    main()
