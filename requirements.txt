@@ -9,3 +9,6 @@ python-dotenv
 # For connecting to your MongoDB database
 # dnspython is required for mongodb+srv:// URLs
 pymongo[srv]
+
+# For making asynchronous HTTP requests to the TMDb API
+httpx
