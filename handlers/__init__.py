@@ -1,0 +1,1 @@
+# /moviekotha/handlers/__init__.py
